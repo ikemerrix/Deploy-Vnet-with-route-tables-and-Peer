@@ -5,7 +5,7 @@
        "spokeVnets":{ 
           "type":"object",
           "defaultValue":{ 
-             "vnetName":"ice-uw-vnet-pse",
+             "vnetName":"myVnetName",
              "vnetPrefix":"10.241.216.0/22",
              "subnets":[ 
                 { 
