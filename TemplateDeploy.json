@@ -9,44 +9,47 @@
              "vnetPrefix":"10.241.216.0/22",
              "subnets":[ 
                 { 
-                   "subnetName":"vmspub-uw-sn-p",
+                   "subnetName":"Default_subnet",
                    "SubnetPrefix":"10.241.216.0/26"
                 },
                 { 
-                   "subnetName":"vmsprivate-uw-sn-p",
+                   "subnetName":"private_subnet",
                    "SubnetPrefix":"10.241.216.64/26"
                 },
                 { 
-                   "subnetName":"functionspublic-uw-sn-p",
+                   "subnetName":"public_subnet",
                    "SubnetPrefix":"10.241.216.128/26"
                 },
                 { 
-                   "subnetName":"functionprivate-uw-sn-d",
+                   "subnetName":"secondary_private_subnet",
                    "SubnetPrefix":"10.241.216.192/26"
                 }
              ]
           },
           "metadata":{ 
-             "description":"Name for the new VNet."
+             "description":"Name for the new VNet and Subnets."
           }
        },
-       "routeTables":{ 
+       "routeTable":{ 
           "type":"string",
-          "defaultValue":"ice-uw-udr-d",
+          "defaultValue":"Routetablename",
           "metadata": {
               "description": "Name of the Route Table"
             }
         },
        "hubVnetResourceId":{ 
           "type":"string",
-          "defaultValue":"/subscriptions/f2aeaccd-73bf-45ef-8603-946e33fa5570/resourceGroups/morrisonRG/providers/Microsoft.Network/virtualNetworks/newstfk",
+          "defaultValue":"/subscriptions/XXXX-xxxX-xxxX-xxxX-XXXX/resourceGroups/myresourcegroup/providers/Microsoft.Network/virtualNetworks/HubVnetName",
           "metadata":{ 
              "description":"The ResourceId of the existing hub vnet used for peering"
           }
        },
        "rgName":{ 
           "type":"string",
-          "defaultValue":"ice-uw-rg-p175"
+          "defaultValue":"myNewResourceGroupName",
+          "metadata": { 
+            "description":"resourcegroupname for deployment"
+        }
        },
        "rgLocation":{ 
           "type":"string",
@@ -60,9 +63,9 @@
        },
        "newrgName":{ 
         "type":"string",
-        "defaultValue": "ice-uw-rg-s",
+        "defaultValue": "TeamResourceGroupName",
         "metadata": { 
-            "description":"new empty resourcegroupname"
+            "description":"New empty resourcegroup for later use"
         }
      },
      "newrgLocation":{ 
@@ -85,7 +88,7 @@
               "properties":{ 
                  "addressPrefix":"[parameters('spokeVnets').subnets[copyindex('subnets')].SubnetPrefix]",
                  "routeTable":{ 
-                    "id": "[concat(subscription().id, '/resourceGroups/', parameters('rgName'), '/providers/Microsoft.Network/routeTables/', parameters('routeTables'))]"
+                    "id": "[concat(subscription().id, '/resourceGroups/', parameters('rgName'), '/providers/Microsoft.Network/routeTables/', parameters('routeTable'))]"
                  },
                  "networkSecurityGroup":{ 
                     "id": "[concat(subscription().id, '/resourceGroups/', parameters('rgName'), '/providers/Microsoft.Network/networkSecurityGroups/', variables('UdrNsgName'))]"
@@ -143,7 +146,7 @@
                    { 
                     "apiVersion":"2015-06-15",
                     "type":"Microsoft.Network/routeTables",
-                    "name":"[parameters('routeTables')]",
+                    "name":"[parameters('routeTable')]",
                     "location":"[variables('resourceGroupLocation')]",
                     "tags":{},
                     "properties":{ 
