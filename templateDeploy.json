@@ -1,0 +1,337 @@
+{ 
+    "$schema":"http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion":"1.0.0.0",
+    "parameters":{ 
+       "spokeVnets":{ 
+          "type":"object",
+          "defaultValue":{ 
+             "vnetName":"ice-uw-vnet-pse",
+             "vnetPrefix":"10.241.216.0/22",
+             "subnets":[ 
+                { 
+                   "subnetName":"Default_subnet",
+                   "SubnetPrefix":"10.241.216.0/26"
+                },
+                { 
+                   "subnetName":"private_subnet",
+                   "SubnetPrefix":"10.241.216.64/26"
+                },
+                { 
+                   "subnetName":"public_subnet",
+                   "SubnetPrefix":"10.241.216.128/26"
+                },
+                { 
+                   "subnetName":"secondary_private_subnet",
+                   "SubnetPrefix":"10.241.216.192/26"
+                }
+             ]
+          },
+          "metadata":{ 
+             "description":"Name for the new VNet and Subnets."
+          }
+       },
+       "routeTable":{ 
+          "type":"string",
+          "defaultValue":"Routetablename",
+          "metadata": {
+              "description": "Name of the Route Table"
+            }
+        },
+       "hubVnetResourceId":{ 
+          "type":"string",
+          "defaultValue":"/subscriptions/XXXX-xxxX-xxxX-xxxX-XXXX/resourceGroups/myresourcegroup/providers/Microsoft.Network/virtualNetworks/HubVnetName",
+          "metadata":{ 
+             "description":"The ResourceId of the existing hub vnet used for peering"
+          }
+       },
+       "rgName":{ 
+          "type":"string",
+          "defaultValue":"myNewResourceGroupName",
+          "metadata": { 
+            "description":"resourcegroupname for deployment"
+        }
+       },
+       "rgLocation":{ 
+          "type":"string",
+          "defaultValue":"West US",
+          "metadata":{ 
+             "description":"resource group location for all resources"
+          }
+       },
+       "rgCount": {
+          "type": "int"
+       },
+       "newrgName":{ 
+        "type":"string",
+        "defaultValue": "TeamResourceGroupName",
+        "metadata": { 
+            "description":"New empty resourcegroup for later use"
+        }
+     },
+     "newrgLocation":{ 
+        "type":"string",
+        "defaultValue":"West US",
+        "metadata":{ 
+           "description":"resourcegroup location of requested resourcegroup"
+        }
+     }
+    },
+    "variables":{ 
+       "UdrNsgName":"Allow-in-RDP-3389",
+       "resourceGroupLocation": "[concat('[', 'resourceGroup().location', ']')]",
+       "copy":[ 
+        { 
+           "name":"subnets",
+           "count":"[length(parameters('spokeVnets').subnets)]",
+           "input":{ 
+              "name":"[parameters('spokeVnets').subnets[copyindex('subnets')].subnetName]",
+              "properties":{ 
+                 "addressPrefix":"[parameters('spokeVnets').subnets[copyindex('subnets')].SubnetPrefix]",
+                 "routeTable":{ 
+                    "id": "[concat(subscription().id, '/resourceGroups/', parameters('rgName'), '/providers/Microsoft.Network/routeTables/', parameters('routeTable'))]"
+                 },
+                 "networkSecurityGroup":{ 
+                    "id": "[concat(subscription().id, '/resourceGroups/', parameters('rgName'), '/providers/Microsoft.Network/networkSecurityGroups/', variables('UdrNsgName'))]"
+                 } 
+              }
+           }
+        }
+     ]
+    },
+    "resources":[
+        {
+        "type":"Microsoft.Resources/resourceGroups",
+        "apiVersion":"2018-05-01",
+        "name":"[concat('ice-uw-rg-s', copyIndex(1))]",
+        "location":"[parameters('newrgLocation')]",
+        "properties":{},
+        "copy": {
+          "name": "resourcegroup",
+          "count": "[parameters('rgCount')]"
+        }
+        },
+       { 
+          "type":"Microsoft.Resources/resourceGroups",
+          "apiVersion":"2018-05-01",
+          "name":"[parameters('rgName')]",
+          "location":"[parameters('rgLocation')]",
+          "properties":{ 
+ 
+          }
+       },
+       { 
+          "apiVersion":"2018-05-01",
+          "name":"[concat(parameters('rgName'), 'Deployment')]",
+          "resourceGroup": "[parameters('rgName')]",
+          "type":"Microsoft.Resources/deployments",
+          "dependsOn":[ 
+             "[parameters('rgName')]"
+          ],
+          "properties":{ 
+             "mode":"Incremental",
+             "template":{ 
+                "$schema":"https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+                "contentVersion":"1.0.0.0",
+                "parameters":{},
+                "resources":[ 
+                   { 
+                      "name":"[concat('Lock-', parameters('rgName'))]",
+                      "type":"Microsoft.Authorization/locks",
+                      "apiVersion":"2017-04-01",
+                      "properties":{ 
+                         "level":"CanNotDelete",
+                         "notes":"Prevent deletion of the resourceGroup"
+                      }
+                   },
+                   { 
+                    "apiVersion":"2015-06-15",
+                    "type":"Microsoft.Network/routeTables",
+                    "name":"[parameters('routeTable')]",
+                    "location":"[variables('resourceGroupLocation')]",
+                    "tags":{},
+                    "properties":{ 
+                       "routes":[ 
+                          { 
+                             "name":"Route-To-Hub",
+                             "properties":{ 
+                                "addressPrefix":"0.0.0.0/0",
+                                "nextHopType":"Internet"
+                             }
+                          }
+                       ]
+                    }
+                 },
+                 { 
+                    "apiVersion":"2015-06-15",
+                    "type":"Microsoft.Network/virtualNetworks",
+                    "name":"[parameters('spokeVnets').vnetName]",
+                    "location":"[variables('resourceGroupLocation')]",
+                    "dependsOn":[ 
+                      "[variables('UdrNsgName')]"
+                   ],
+                    "tags":{ 
+ 
+                    },
+                    "properties":{ 
+                       "addressSpace":{ 
+                          "addressPrefixes":[ 
+                             "[parameters('spokeVnets').vnetPrefix]"
+                          ]
+                       },
+                       "subnets": "[variables('subnets')]"
+                    }
+                 },
+                 { 
+                    "comments":"network security group for all subnets",
+                    "type":"Microsoft.Network/networkSecurityGroups",
+                    "name":"[variables('UdrNsgName')]",
+                    "apiVersion":"2018-02-01",
+                    "location":"[variables('resourceGroupLocation')]",
+                    "properties":{ 
+                       "securityRules":[ 
+                          { 
+                             "name":"Allow-in-RDP-3389",
+                             "properties":{ 
+                                "description":"Allow inbound RDP",
+                                "protocol":"Tcp",
+                                "sourcePortRange":"*",
+                                "destinationPortRange":"3389",
+                                "sourceAddressPrefix":"*",
+                                "destinationAddressPrefix":"*",
+                                "access":"Allow",
+                                "priority":101,
+                                "direction":"Inbound"
+                             }
+                          },
+                          { 
+                             "name":"Allow-in-RDP",
+                             "properties":{ 
+                                "description":"Allow-SSL-443",
+                                "protocol":"Tcp",
+                                "sourcePortRange":"*",
+                                "destinationPortRange":"443",
+                                "sourceAddressPrefix":"Internet",
+                                "destinationAddressPrefix":"*",
+                                "access":"Allow",
+                                "priority":102,
+                                "direction":"Inbound"
+                             }
+                          }
+                       ],
+                       "defaultSecurityRules":[ 
+                          { 
+                             "name":"AllowVnetInBound",
+                             "properties":{ 
+                                "description":"Allow inbound traffic from all VMs in VNET",
+                                "protocol":"*",
+                                "sourcePortRange":"*",
+                                "destinationPortRange":"*",
+                                "sourceAddressPrefix":"VirtualNetwork",
+                                "destinationAddressPrefix":"VirtualNetwork",
+                                "access":"Allow",
+                                "priority":65000,
+                                "direction":"Inbound"
+                             }
+                          },
+                          { 
+                             "name":"AllowAzureLoadBalancerInBound",
+                             "properties":{ 
+                                "description":"Allow inbound traffic from azure load balancer",
+                                "protocol":"*",
+                                "sourcePortRange":"*",
+                                "destinationPortRange":"*",
+                                "sourceAddressPrefix":"AzureLoadBalancer",
+                                "destinationAddressPrefix":"*",
+                                "access":"Allow",
+                                "priority":65001,
+                                "direction":"Inbound"
+                             }
+                          },
+                          { 
+                             "name":"DenyAllInBound",
+                             "properties":{ 
+                                "description":"Deny all inbound traffic",
+                                "protocol":"*",
+                                "sourcePortRange":"*",
+                                "destinationPortRange":"*",
+                                "sourceAddressPrefix":"*",
+                                "destinationAddressPrefix":"*",
+                                "access":"Deny",
+                                "priority":65500,
+                                "direction":"Inbound"
+                             }
+                          },
+                          { 
+                             "name":"AllowVnetOutBound",
+                             "properties":{ 
+                                "description":"Allow outbound traffic from all VMs to all VMs in VNET",
+                                "protocol":"*",
+                                "sourcePortRange":"*",
+                                "destinationPortRange":"*",
+                                "sourceAddressPrefix":"VirtualNetwork",
+                                "destinationAddressPrefix":"VirtualNetwork",
+                                "access":"Allow",
+                                "priority":65000,
+                                "direction":"Outbound"
+                             }
+                          },
+                          { 
+                             "name":"AllowInternetOutBound",
+                             "properties":{ 
+                                "description":"Allow outbound traffic from all VMs to Internet",
+                                "protocol":"*",
+                                "sourcePortRange":"*",
+                                "destinationPortRange":"*",
+                                "sourceAddressPrefix":"*",
+                                "destinationAddressPrefix":"Internet",
+                                "access":"Allow",
+                                "priority":65001,
+                                "direction":"Outbound"
+                             }
+                          },
+                          { 
+                             "name":"DenyAllOutBound",
+                             "properties":{ 
+                                "description":"Deny all outbound traffic",
+                                "protocol":"*",
+                                "sourcePortRange":"*",
+                                "destinationPortRange":"*",
+                                "sourceAddressPrefix":"*",
+                                "destinationAddressPrefix":"*",
+                                "access":"Deny",
+                                "priority":65500,
+                                "direction":"Outbound"
+                             }
+                          }
+                       ]
+                    },
+                    "dependsOn":[ 
+ 
+                    ]
+                 },
+                 { 
+                   "apiVersion":"2019-04-01",
+                   "type":"Microsoft.Network/virtualNetworks/virtualNetworkPeerings",
+                   "name":"[concat(parameters('spokeVnets').vnetName, '/virtualNetworkPeerings')]",
+                   "location":"[variables('resourceGroupLocation')]",
+                   "dependsOn":[ 
+                      "[concat('Microsoft.Network/virtualNetworks/', parameters('spokeVnets').vnetName)]"
+                   ],
+                   "properties":{ 
+                      "allowVirtualNetworkAccess":true,
+                      "allowForwardedTraffic":false,
+                      "allowGatewayTransit":false,
+                      "useRemoteGateways":false,
+                      "remoteVirtualNetwork":{ 
+                         "id":"[parameters('hubVnetResourceId')]"
+                      }
+                   }
+                }
+ 
+               ]
+             },
+             "parameters":{}
+          }
+       }
+    ]
+}
